@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Files consumed inside Linux containers must keep LF endings,
+# even when the repo is cloned on Windows (core.autocrlf=true)
+*.sh text eol=lf
+*.conf text eol=lf
