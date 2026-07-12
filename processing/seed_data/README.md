@@ -1,15 +1,16 @@
 # `/processing/seed_data` -- raw batch source landing
 
-Drop the raw batch source files here (Tama): the McDonald's Store Reviews
-dataset and the McDonald's Stores dataset (see the links in `McDonald's
-analysis.pdf` / `docs/data_model.md`), as CSV/JSON, e.g.:
+The raw batch source files live here (Tama's): the McDonald's Store Reviews
+dataset and the Traffic dataset (TrafficTab23), which replaced the originally
+planned Stores dataset per the lecturer's feedback on the mid-term submission:
 
 ```
 seed_data/
-  reviews.csv    # McDonald's Store Reviews dataset (raw, or trimmed to a
-                 # demo-sized sample -- this is what gets committed to the
-                 # repo and graded, so keep it small enough to check in)
-  stores.csv     # McDonald's Stores dataset
+  reviews.csv          # McDonald's Store Reviews dataset (full)
+  traffic_sample.csv   # reproducible 20,000-row random sample of the full
+                       # 571MB TrafficTab23 dataset -- regenerate the exact
+                       # same sample (seed 42) with
+                       # processing/data_prep/create_traffic_sample.py
 ```
 
 Anything placed here is automatically uploaded into MinIO's `landing` bucket
@@ -25,7 +26,7 @@ config already set up for Spark, e.g.:
 
 ```python
 reviews_df = spark.read.option("header", True).csv("s3a://landing/reviews.csv")
-stores_df = spark.read.option("header", True).csv("s3a://landing/stores.csv")
+traffic_df = spark.read.option("header", True).csv("s3a://landing/traffic_sample.csv")
 ```
 
 ## Why this dataset needs late-arrival handling (and why it's here, not Kafka)
@@ -44,5 +45,6 @@ occasionally backdates `event_time` as a secondary demonstration of
 late-arrival handling on the streaming side, but per the team's own design
 this dataset -- Reviews -- is the primary, required late-arrival source.
 
-Stores is plain static/batch reference data (no late-arrival dimension) --
-used for `dim_store` (SCD Type 2).
+Traffic is plain static/batch context data (no late-arrival dimension). There
+is no external Stores file: `dim_store` (SCD Type 2) is derived during
+processing from the store IDs that link the three sources together.

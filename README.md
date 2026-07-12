@@ -3,7 +3,7 @@
 An end-to-end data engineering pipeline (batch + streaming) built for the Big
 Data Engineering final project: Kafka -> Spark -> Iceberg-on-MinIO
 (bronze/silver/gold) -> Airflow, predicting underperforming McDonald's
-branches from delivery, review, and store data. See `docs/` for the business
+branches from delivery, review, and traffic data. See `docs/` for the business
 context, data model, and architecture, and the McDonald's analysis deck in the
 repo root for the original design.
 
@@ -89,9 +89,16 @@ architecture, is the batch **Reviews** dataset (`review_time` can trail
 `ingestion_time` by hours/days) -- see
 [`processing/seed_data/README.md`](processing/seed_data/README.md).
 
-Two other batch sources (Reviews, Stores -- real Kaggle data, Tama's) land in
-MinIO's `landing` bucket via `processing/seed_data/` for `batch_to_bronze.py`
-to read; see that same file for the upload mechanism.
+Two other batch sources (Reviews and Traffic, both sourced by Tama; Traffic
+is committed as a reproducible 20,000-row sample of the full 571MB dataset --
+see `processing/data_prep/create_traffic_sample.py`) land in MinIO's `landing`
+bucket via `processing/seed_data/` for `batch_to_bronze.py` to read; see that
+same file for the upload mechanism.
+
+Note there is no separate Stores dataset: Traffic replaced it (per the
+lecturer's feedback on the mid-term submission), and the `dim_store` dimension
+is instead derived during processing from the store IDs that link the three
+sources together.
 
 Spark jobs read/write Iceberg tables through the `lake` REST catalog under
 namespaces `bronze` / `silver` / `gold` -- see

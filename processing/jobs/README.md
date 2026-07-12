@@ -31,7 +31,7 @@ create with `SparkSession.builder.getOrCreate()`.
   and cached in the `ivy2_cache` volume (shared across all Spark containers, so
   it only downloads once). This needs internet access the very first time any
   Kafka-reading job runs.
-- Batch inputs (reviews, stores): read from MinIO's `landing` bucket, e.g.
+- Batch inputs (reviews, traffic): read from MinIO's `landing` bucket, e.g.
   `spark.read.option("header", True).csv("s3a://landing/reviews.csv")`. See
   `../seed_data/README.md` for how raw files get there (drop them in
   `processing/seed_data/`, an init container uploads them to `s3://landing/`
@@ -57,10 +57,10 @@ primary/required late-arrival story for this project.
 
 | File | Owner | Status |
 |---|---|---|
-| `batch_to_bronze.py` | Tama | not yet added -- wired into `main_pipeline_dag.py` |
+| `batch_to_bronze.py` | Tama | **present** -- loads Reviews + Traffic from `landing` into `lake.bronze.reviews_raw` / `lake.bronze.traffic_raw` (idempotent per source file, partitioned by `ingestion_date`) |
 | `bronze_to_silver.py` | Tama | not yet added -- wired into `main_pipeline_dag.py` |
 | `silver_to_gold.py` | Tama | not yet added -- wired into `main_pipeline_dag.py` |
-| `scd2_dim_store.py` | Tama | not yet added |
+| `scd2_dim_store.py` | Tama | not yet added. `dim_store` is derived from the store IDs linking the three sources (Traffic replaced the external Stores file) |
 | `data_quality_checks.py` | Tama | not yet added -- wired into `main_pipeline_dag.py` |
 | `stream_orders_to_bronze.py` | **unassigned** | not yet added -- wired into `stream_ingestion_dag.py`. This wasn't in either person's original file list; someone needs to own the Kafka-consuming Structured Streaming job. Suggested shape: `readStream` from `orders_stream` with a watermark (`event_time`, `48 hours`) to satisfy the late-arrival requirement, `trigger(availableNow=True)` so it behaves like a bounded batch when triggered by Airflow every few minutes, `writeStream` (or a foreachBatch write) into `lake.bronze.<table>`. |
 | `_smoke_test.py` | infra | present -- **not** part of any DAG, manual-only sanity check |

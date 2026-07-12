@@ -33,7 +33,7 @@ services:
 
   # One-shot: creates the "warehouse" bucket + bronze/silver/gold prefixes, creates
   # the "landing" bucket, and uploads anything dropped in ./seed_data (Tama's raw
-  # batch source files -- reviews, stores, etc.) so batch jobs have real input
+  # batch source files -- reviews, traffic, etc.) so batch jobs have real input
   # data to read from day one instead of a local container filesystem path.
   mc-init:
     image: minio/mc:RELEASE.2024-01-13T08-44-48Z

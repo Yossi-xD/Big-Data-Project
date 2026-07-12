@@ -18,7 +18,17 @@ mc pipe local/warehouse/gold/.keep </dev/null
 
 mc mb --ignore-existing local/landing
 
-if [ -n "$(find /seed_data -type f ! -name .gitkeep ! -name README.md 2>/dev/null)" ]; then
+# Detect seed files with pure shell (glob + case): the minio/mc image ships no
+# `find`, so a $(find ...) check silently returns empty and skips the upload.
+seed_has_files=""
+for f in /seed_data/*; do
+  [ -e "$f" ] || continue # glob matched nothing: $f is the literal pattern
+  case "${f##*/}" in .gitkeep | README.md) continue ;; esac
+  seed_has_files=1
+  break
+done
+
+if [ -n "$seed_has_files" ]; then
   mc cp --recursive /seed_data/ local/landing/
   echo "seed_data uploaded to s3://landing/"
 else
