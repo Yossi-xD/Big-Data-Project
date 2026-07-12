@@ -10,9 +10,11 @@ until mc alias set local http://minio:9000 admin password12345; do
 done
 
 mc mb --ignore-existing local/warehouse
-mc cp /dev/null local/warehouse/bronze/.keep
-mc cp /dev/null local/warehouse/silver/.keep
-mc cp /dev/null local/warehouse/gold/.keep
+# mc refuses /dev/null as a cp source, so create the empty layer markers via
+# mc pipe (zero-byte object from empty stdin) instead
+mc pipe local/warehouse/bronze/.keep </dev/null
+mc pipe local/warehouse/silver/.keep </dev/null
+mc pipe local/warehouse/gold/.keep </dev/null
 
 mc mb --ignore-existing local/landing
 
