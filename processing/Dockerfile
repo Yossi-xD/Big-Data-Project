@@ -9,6 +9,11 @@ ENV ICEBERG_VERSION=1.5.2 \
     HADOOP_AWS_VERSION=3.3.4 \
     AWS_SDK_VERSION=1.12.653
 
+# The base image doesn't put spark-submit on PATH for docker exec / container
+# commands (only its entrypoint's driver/executor modes find it), so every
+# consumer -- README's docker exec, Airflow's DockerOperator tasks -- needs this.
+ENV PATH="/opt/spark/bin:${PATH}"
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
