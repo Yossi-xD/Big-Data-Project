@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Airflow local run artifacts (mounted volumes, not meant to be committed)
+orchestration/logs/
+*.log
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local env overrides, if anyone adds one
+.env
+.env.local
