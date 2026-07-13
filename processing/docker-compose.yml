@@ -4,6 +4,7 @@ networks:
 
 volumes:
   minio_data:
+  iceberg_catalog_data:
   ivy2_cache:
     # Explicit "name:" pins the literal Docker volume name (otherwise Compose
     # prefixes it with the project name). Airflow's DockerOperator references
@@ -33,7 +34,7 @@ services:
 
   # One-shot: creates the "warehouse" bucket + bronze/silver/gold prefixes, creates
   # the "landing" bucket, and uploads anything dropped in ./seed_data (Tama's raw
-  # batch source files -- reviews, stores, etc.) so batch jobs have real input
+  # batch source files -- reviews, etc.) so batch jobs have real input
   # data to read from day one instead of a local container filesystem path.
   mc-init:
     image: minio/mc:RELEASE.2024-01-13T08-44-48Z
@@ -60,6 +61,7 @@ services:
       AWS_ACCESS_KEY_ID: admin
       AWS_SECRET_ACCESS_KEY: password12345
       AWS_REGION: us-east-1
+      CATALOG_URI: jdbc:sqlite:/home/iceberg/iceberg_catalog.db
       CATALOG_WAREHOUSE: s3://warehouse/
       CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
       CATALOG_S3_ENDPOINT: http://minio:9000
@@ -67,7 +69,8 @@ services:
     networks:
       - bigdata_net
     restart: unless-stopped
-
+    volumes:
+      - iceberg_catalog_data:/home/iceberg
   # --- Spark runtime (Spark + Iceberg + hadoop-aws) ---
   # This is the ONLY image Spark jobs ever run from: the long-lived container below
   # (for manual inspection / demo) and every Airflow DockerOperator task (ephemeral,
