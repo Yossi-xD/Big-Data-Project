@@ -1,5 +1,6 @@
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
+from typing import Optional
 
 
 BRONZE_NAMESPACE = "lake.bronze"
@@ -11,6 +12,7 @@ BATCH_SOURCES = [
         "source_system": "mcdonalds_reviews",
         "table_name": "lake.bronze.reviews_raw",
         "multiline": True,
+        "escape": '"',
     },
     {
         "source_path": "s3a://landing/traffic_sample.csv",
@@ -18,6 +20,7 @@ BATCH_SOURCES = [
         "source_system": "traffic_tab23",
         "table_name": "lake.bronze.traffic_raw",
         "multiline": False,
+        "escape": None,
     },
 ]
 
@@ -43,15 +46,20 @@ def read_raw_csv(
     spark: SparkSession,
     source_path: str,
     multiline: bool,
+    escape: Optional[str],
 ) -> DataFrame:
-    return (
+    reader = (
         spark.read
         .option("header", True)
         .option("inferSchema", False)
         .option("multiLine", multiline)
         .option("mode", "PERMISSIVE")
-        .csv(source_path)
     )
+
+    if escape is not None:
+        reader = reader.option("escape", escape)
+
+    return reader.csv(source_path)
 
 
 def add_ingestion_metadata(
@@ -102,6 +110,7 @@ def ingest_source(
         spark=spark,
         source_path=source["source_path"],
         multiline=source["multiline"],
+        escape=source["escape"],
     )
 
     bronze_dataframe = add_ingestion_metadata(
