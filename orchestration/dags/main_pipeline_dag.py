@@ -67,7 +67,14 @@ with DAG(
 
     load_batch_to_bronze = spark_task("load_batch_to_bronze", "batch_to_bronze.py")
     run_bronze_to_silver = spark_task("run_bronze_to_silver", "bronze_to_silver.py")
+    build_silver_conformed = spark_task("build_silver_conformed","build_silver_conformed.py",)
     run_silver_to_gold = spark_task("run_silver_to_gold", "silver_to_gold.py")
     run_quality_checks = spark_task("run_quality_checks", "data_quality_checks.py")
 
-    load_batch_to_bronze >> run_bronze_to_silver >> run_silver_to_gold >> run_quality_checks
+    (
+        load_batch_to_bronze
+        >> run_bronze_to_silver
+        >> build_silver_conformed
+        >> run_silver_to_gold
+        >> run_quality_checks
+    )
