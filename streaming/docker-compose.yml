@@ -27,6 +27,9 @@ services:
       - "29092:29092" # reachable from the host machine (e.g. a local Kafka client)
     volumes:
       - kafka_data:/var/lib/kafka/data
+    tmpfs:
+      - /etc/kafka/secrets:mode=0777
+      - /mnt/shared/config:mode=0777
     networks:
       - bigdata_net
     healthcheck:
@@ -45,6 +48,10 @@ services:
         condition: service_healthy
     networks:
       - bigdata_net
+    tmpfs:
+      - /etc/kafka/secrets:mode=0777
+      - /mnt/shared/config:mode=0777
+      - /var/lib/kafka/data:mode=0777
     entrypoint: >
       /bin/bash -c "
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic orders_stream --partitions 3 --replication-factor 1 &&
