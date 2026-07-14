@@ -29,7 +29,11 @@ for f in /seed_data/*; do
 done
 
 if [ -n "$seed_has_files" ]; then
-  mc cp --recursive /seed_data/ local/landing/
+  # mirror instead of cp: mc cp has no --exclude, and we don't want the folder's
+  # README.md/.gitkeep ending up in the landing bucket alongside the data files.
+  # The leading * is required: this mc release matches exclude patterns against
+  # the object path with a leading slash ("/README.md").
+  mc mirror --overwrite --exclude "*README.md" --exclude "*.gitkeep" /seed_data/ local/landing/
   echo "seed_data uploaded to s3://landing/"
 else
   echo "no seed_data files yet -- landing bucket created empty"

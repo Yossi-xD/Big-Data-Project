@@ -61,10 +61,12 @@ visually -- this is the easiest way to see late-arriving messages (compare
 
 **Airflow** -- open http://localhost:8080 (user/password `admin`/`admin`). Both
 `main_pipeline_dag` and `stream_ingestion_dag` should be visible and unpaused.
-Until the real job scripts land in `/processing/jobs` (see that folder's
-`README.md`), triggering a DAG run will fail at the "no such file" step inside
-the container -- that confirms the DockerOperator/network/image plumbing is
-correct and only the job logic is pending.
+`load_batch_to_bronze` already has its job script (`batch_to_bronze.py`) and
+should succeed end-to-end; downstream tasks fail at the "no such file" step
+until the remaining job scripts land in `/processing/jobs` (see that folder's
+`README.md` for the status table) -- that failure mode confirms the
+DockerOperator/network/image plumbing is correct and only the job logic is
+pending.
 
 ## Rebuilding after job changes
 

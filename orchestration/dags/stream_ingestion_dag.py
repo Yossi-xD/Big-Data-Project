@@ -31,6 +31,14 @@ default_args = {
     "retry_delay": datetime.timedelta(minutes=1),
 }
 
+
+def alert_on_failure(context) -> None:
+    ti = context["task_instance"]
+    print(
+        f"[ALERT] task={ti.task_id} dag={ti.dag_id} run_id={context['run_id']} FAILED. "
+        f"See the task log above for the Spark job's stack trace."
+    )
+
 with DAG(
     dag_id="stream_ingestion_dag",
     description="Micro-batch: drain orders_stream (Kafka) into the bronze layer",
@@ -52,4 +60,6 @@ with DAG(
         network_mode=NETWORK,
         mounts=[IVY_CACHE_MOUNT],
         mount_tmp_dir=False,
+        environment={"AWS_REGION": "us-east-1"},
+        on_failure_callback=alert_on_failure,
     )

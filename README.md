@@ -81,10 +81,15 @@ The `orders_stream` Kafka topic (produced by
 }
 ```
 
-A configurable fraction of events (`LATE_RATIO`, default 15%) carry an
-`event_time` backdated by up to `MAX_LATE_HOURS` (default 48h) relative to
-`ingestion_time` -- a secondary demonstration of late-arrival handling on the
-streaming side. The **primary** late-arrival source, per the team's own
+Events replay the real **Food Delivery** dataset committed at
+`streaming/producer/data/food_delivery_dataset.csv` (20,000 orders across 100
+stores): `order_id`, `store_id`, `order_value` and `traffic_condition` come
+straight from the dataset, while `event_time`/`ingestion_time` are stamped at
+emit time and `delivery_duration` is synthesized (the source's order/delivery
+times are date-only, so no real duration exists). A configurable fraction of
+events (`LATE_RATIO`, default 15%) carry an `event_time` backdated by up to
+`MAX_LATE_HOURS` (default 48h) relative to `ingestion_time` -- a secondary
+demonstration of late-arrival handling on the streaming side. The **primary** late-arrival source, per the team's own
 architecture, is the batch **Reviews** dataset (`review_time` can trail
 `ingestion_time` by hours/days) -- see
 [`processing/seed_data/README.md`](processing/seed_data/README.md).
