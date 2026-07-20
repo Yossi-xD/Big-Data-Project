@@ -98,9 +98,9 @@ the assignment asks for. A second bucket, `landing`, holds the raw,
 pre-Iceberg batch files (Reviews, Traffic) that `batch_to_bronze.py` reads to
 produce the first bronze tables (`lake.bronze.reviews_raw`,
 `lake.bronze.traffic_raw`) -- see `/processing/jobs/README.md` for the
-exact catalog contract Spark jobs must follow. (Dedicated data-model docs with
-the per-layer table designs are still to be added under `/docs` alongside the
-silver/gold jobs.)
+exact catalog contract Spark jobs must follow, and
+[`docs/data_model.md`](data_model.md) for the full bronze/silver/gold
+mermaid.js ER diagrams and the fact/dimension/SCD2 design.
 
 ## Orchestration: two DAGs
 

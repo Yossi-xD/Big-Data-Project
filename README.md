@@ -112,7 +112,9 @@ sources together.
 Spark jobs read/write Iceberg tables through the `lake` REST catalog under
 namespaces `bronze` / `silver` / `gold` -- see
 [`processing/jobs/README.md`](processing/jobs/README.md) for the full
-job/catalog contract, including which job files are still pending.
+job/catalog contract, and [`docs/data_model.md`](docs/data_model.md) for the
+mermaid.js ER diagrams (bronze/silver/gold, fact/dimension tables, the
+`dim_store` SCD2 design) and the bronze-to-gold lineage.
 
 ## Running the batch + streaming pipeline
 
