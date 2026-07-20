@@ -60,13 +60,13 @@ visually -- this is the easiest way to see late-arriving messages (compare
 `event_time` vs `ingestion_time` in the payload).
 
 **Airflow** -- open http://localhost:8080 (user/password `admin`/`admin`). Both
-`main_pipeline_dag` and `stream_ingestion_dag` should be visible and unpaused.
-`load_batch_to_bronze` already has its job script (`batch_to_bronze.py`) and
-should succeed end-to-end; downstream tasks fail at the "no such file" step
-until the remaining job scripts land in `/processing/jobs` (see that folder's
-`README.md` for the status table) -- that failure mode confirms the
-DockerOperator/network/image plumbing is correct and only the job logic is
-pending.
+`main_pipeline_dag` and `stream_ingestion_dag` are visible but **created
+paused** (`AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"`) so they don't
+auto-trigger a run before `processing`/`streaming` are actually up -- unpause
+each from the UI once MinIO, the Iceberg REST catalog, and Kafka are healthy.
+All eight `main_pipeline_dag` tasks (bronze through the gold aggregates and
+quality checks) and the `stream_ingestion_dag` task have their job scripts in
+`/processing/jobs` and should succeed end-to-end.
 
 ## Rebuilding after job changes
 

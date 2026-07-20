@@ -1,52 +1,69 @@
-"""Streams the real Food Delivery dataset onto Kafka as orders_stream events.
-
-Replays data/food_delivery_dataset.csv (committed with the repo: 20,000 real
-orders across 100 restaurants) row by row, mapped onto the team's data contract:
-
-    order_id, store_id, order_value, delivery_duration, traffic_condition,
-    event_time, ingestion_time
-
-order_id, store_id (the dataset's restaurant_id), order_value and
-traffic_condition come straight from the dataset. The dataset's order/delivery
-times are date-only, so no real duration can be derived from it and
-delivery_duration is synthesized. event_time / ingestion_time are stamped at
-emit time: a configurable fraction of events is emitted with a backdated
-event_time (up to MAX_LATE_HOURS in the past) to exercise late-arrival handling
-in the silver layer, per the assignment's "up to 48 hours after event time"
-requirement.
-
-When the file is exhausted the producer starts over from the top; order_ids in
-replay cycles get a "_R<cycle>" suffix so they stay unique across cycles.
-"""
+"""Streams food-delivery dataset rows to Kafka as order events."""
 
 import csv
 import json
 import logging
 import os
 import random
+import signal
 import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from confluent_kafka import Producer
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
 log = logging.getLogger("orders_producer")
 
-BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-TOPIC = os.environ.get("KAFKA_TOPIC", "orders_stream")
-MESSAGES_PER_SECOND = float(os.environ.get("MESSAGES_PER_SECOND", "2"))
-LATE_RATIO = float(os.environ.get("LATE_RATIO", "0.15"))
-MAX_LATE_HOURS = float(os.environ.get("MAX_LATE_HOURS", "48"))
-DATASET_PATH = Path(os.environ.get("DATASET_PATH", "data/food_delivery_dataset.csv"))
+BOOTSTRAP_SERVERS = os.environ.get(
+    "KAFKA_BOOTSTRAP_SERVERS",
+    "kafka:9092",
+)
+TOPIC = os.environ.get(
+    "KAFKA_TOPIC",
+    "orders_stream",
+)
+CSV_PATH = os.environ.get(
+    "ORDERS_CSV_PATH",
+    "/app/data/food_delivery_dataset.csv",
+)
+MESSAGES_PER_SECOND = float(
+    os.environ.get("MESSAGES_PER_SECOND", "2")
+)
+LATE_RATIO = float(
+    os.environ.get("LATE_RATIO", "0.15")
+)
+MAX_LATE_HOURS = float(
+    os.environ.get("MAX_LATE_HOURS", "48")
+)
+
+running = True
 
 
-def load_orders(dataset_path: Path) -> list[dict]:
-    with dataset_path.open("r", encoding="utf-8-sig", newline="") as dataset_file:
-        return list(csv.DictReader(dataset_file))
+def request_shutdown(signum, frame) -> None:
+    global running
+    running = False
+    log.info("shutdown requested")
 
 
-def build_event(row: dict, cycle: int) -> dict:
+def load_orders() -> list:
+    with open(
+        CSV_PATH,
+        newline="",
+        encoding="utf-8-sig",
+    ) as file:
+        orders = list(csv.DictReader(file))
+
+    if not orders:
+        raise ValueError(f"No orders found in {CSV_PATH}")
+
+    return orders
+
+
+def build_event(source_order: dict) -> dict:
     now = datetime.now(timezone.utc)
 
     if random.random() < LATE_RATIO:
@@ -55,29 +72,26 @@ def build_event(row: dict, cycle: int) -> dict:
     else:
         event_time = now
 
-    order_id = row["order_id"] if cycle == 0 else f"{row['order_id']}_R{cycle}"
+    event = dict(source_order)
+    event["store_id"] = source_order["restaurant_id"]
+    event["event_time"] = event_time.isoformat()
+    event["ingestion_time"] = now.isoformat()
+    event["source_dataset"] = "food_delivery_dataset.csv"
 
-    return {
-        "order_id": order_id,
-        "store_id": row["restaurant_id"],
-        "order_value": float(row["order_value"]),
-        # the dataset's order/delivery times are date-only, so an actual
-        # duration cannot be derived from it
-        "delivery_duration": random.randint(10, 65),
-        "traffic_condition": row["traffic_condition"],
-        "event_time": event_time.isoformat(),
-        "ingestion_time": now.isoformat(),
-    }
+    return event
 
 
 def delivery_report(err, msg) -> None:
     if err is not None:
-        log.error("delivery failed for key=%s: %s", msg.key(), err)
+        log.error(
+            "delivery failed for key=%s: %s",
+            msg.key(),
+            err,
+        )
 
 
 def main() -> None:
-    orders = load_orders(DATASET_PATH)
-    log.info("loaded %d orders from %s", len(orders), DATASET_PATH)
+    orders = load_orders()
 
     producer = Producer({
         "bootstrap.servers": BOOTSTRAP_SERVERS,
@@ -85,34 +99,49 @@ def main() -> None:
     })
 
     log.info(
-        "producing to topic=%s at ~%.2f msg/s (late_ratio=%.2f, max_late_hours=%.1f)",
-        TOPIC, MESSAGES_PER_SECOND, LATE_RATIO, MAX_LATE_HOURS,
+        "loaded %d dataset orders; producing to topic=%s "
+        "at ~%.2f msg/s",
+        len(orders),
+        TOPIC,
+        MESSAGES_PER_SECOND,
     )
 
-    sleep_s = 1.0 / MESSAGES_PER_SECOND if MESSAGES_PER_SECOND > 0 else 1.0
+    sleep_seconds = (
+        1.0 / MESSAGES_PER_SECOND
+        if MESSAGES_PER_SECOND > 0
+        else 1.0
+    )
 
-    cycle = 0
-    try:
-        while True:
-            for row in orders:
-                event = build_event(row, cycle)
-                producer.produce(
-                    TOPIC,
-                    key=event["order_id"],
-                    value=json.dumps(event),
-                    callback=delivery_report,
-                )
-                producer.poll(0)
-                log.info("sent %s", event)
-                time.sleep(sleep_s)
+    order_index = 0
 
-            cycle += 1
-            log.info("dataset exhausted -- replaying from the top (cycle %d)", cycle)
-    except KeyboardInterrupt:
-        log.info("shutting down producer")
-    finally:
-        producer.flush(10)
+    while running:
+        source_order = orders[order_index]
+        event = build_event(source_order)
+
+        producer.produce(
+            TOPIC,
+            key=event["order_id"],
+            value=json.dumps(event),
+            callback=delivery_report,
+        )
+        producer.poll(0)
+
+        log.info(
+            "sent order_id=%s store_id=%s event_time=%s",
+            event["order_id"],
+            event["store_id"],
+            event["event_time"],
+        )
+
+        order_index = (order_index + 1) % len(orders)
+        time.sleep(sleep_seconds)
+
+    producer.flush(10)
+    log.info("producer stopped")
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, request_shutdown)
+    signal.signal(signal.SIGINT, request_shutdown)
     main()
+    

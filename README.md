@@ -67,31 +67,35 @@ diagram and the "why" behind the design choices are in
 ## Data contract
 
 The `orders_stream` Kafka topic (produced by
-`streaming/producer/orders_producer.py`) emits JSON matching:
+`streaming/producer/orders_producer.py`) replays the real **Food Delivery**
+dataset committed at `streaming/producer/data/food_delivery_dataset.csv`
+(20,000 orders across 100 restaurants), row by row, forwarding every original
+column as-is plus four fields added at emit time:
 
 ```json
 {
-  "order_id": "ORD_1A2B3C4D5E",
-  "store_id": "5021",
-  "order_value": 42.5,
-  "delivery_duration": 31,
-  "traffic_condition": "Low",
+  "order_id": "ORD000001",
+  "restaurant_id": "16",
+  "store_id": "16",
+  "order_value": "42.21",
+  "traffic_condition": "Medium",
+  "...": "(every other original food_delivery_dataset.csv column)",
   "event_time": "2026-06-24T12:30:00+00:00",
-  "ingestion_time": "2026-06-24T14:05:00+00:00"
+  "ingestion_time": "2026-06-24T14:05:00+00:00",
+  "source_dataset": "food_delivery_dataset.csv"
 }
 ```
 
-Events replay the real **Food Delivery** dataset committed at
-`streaming/producer/data/food_delivery_dataset.csv` (20,000 orders across 100
-stores): `order_id`, `store_id`, `order_value` and `traffic_condition` come
-straight from the dataset, while `event_time`/`ingestion_time` are stamped at
-emit time and `delivery_duration` is synthesized (the source's order/delivery
-times are date-only, so no real duration exists). A configurable fraction of
-events (`LATE_RATIO`, default 15%) carry an `event_time` backdated by up to
-`MAX_LATE_HOURS` (default 48h) relative to `ingestion_time` -- a secondary
-demonstration of late-arrival handling on the streaming side. The **primary** late-arrival source, per the team's own
-architecture, is the batch **Reviews** dataset (`review_time` can trail
-`ingestion_time` by hours/days) -- see
+`store_id` is a copy of `restaurant_id` to satisfy the team's data contract.
+The full original row (not a slim subset) is forwarded because
+`bronze_to_silver.py` parses fields like `order_time`, `order_frequency` and
+`order_history` straight out of this JSON. `event_time`/`ingestion_time` are
+stamped at emit time; a configurable fraction of events (`LATE_RATIO`,
+default 15%) carry an `event_time` backdated by up to `MAX_LATE_HOURS`
+(default 48h) relative to `ingestion_time` -- a secondary demonstration of
+late-arrival handling on the streaming side. The **primary** late-arrival
+source, per the team's own architecture, is the batch **Reviews** dataset
+(`review_time` can trail `ingestion_time` by hours/days) -- see
 [`processing/seed_data/README.md`](processing/seed_data/README.md).
 
 Two other batch sources (Reviews and Traffic, both sourced by Tama; Traffic
@@ -112,11 +116,15 @@ job/catalog contract, including which job files are still pending.
 
 ## Running the batch + streaming pipeline
 
-In the Airflow UI (http://localhost:8080), two DAGs are pre-loaded and
-unpaused:
+In the Airflow UI (http://localhost:8080), two DAGs are pre-loaded, **paused
+by default** (`AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"`) so they
+don't auto-trigger before `processing`/`streaming` are up -- unpause each from
+the UI once MinIO, the Iceberg REST catalog, and Kafka are healthy:
 
 - `main_pipeline_dag` (daily): `load_batch_to_bronze` -> `run_bronze_to_silver`
-  -> `run_silver_to_gold` -> `run_quality_checks`.
+  -> `build_silver_conformed` -> `build_gold_dimensions` ->
+  `update_scd2_dim_store` -> `build_gold_facts` -> `build_gold_aggregates` ->
+  `run_quality_checks`.
 - `stream_ingestion_dag` (every 5 min): drains `orders_stream` into bronze via
   Spark Structured Streaming.
 

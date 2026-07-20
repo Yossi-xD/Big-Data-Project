@@ -105,12 +105,17 @@ silver/gold jobs.)
 ## Orchestration: two DAGs
 
 - `main_pipeline_dag` (daily): `load_batch_to_bronze` -> `run_bronze_to_silver`
-  -> `run_silver_to_gold` -> `run_quality_checks`.
+  -> `build_silver_conformed` -> `build_gold_dimensions` ->
+  `update_scd2_dim_store` -> `build_gold_facts` -> `build_gold_aggregates` ->
+  `run_quality_checks`.
 - `stream_ingestion_dag` (every 5 minutes): drains whatever has landed in the
   `orders_stream` Kafka topic since the last run into bronze, via Spark
   Structured Streaming with `trigger(availableNow=True)`.
 
-Both DAGs use the same ephemeral-container execution model described above.
-Retries (2x, with a short delay) and an `on_failure_callback` that logs a clear
-failure message give basic error handling/alerting without needing an external
-alerting service.
+Both DAGs are created **paused** (`AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION:
+"true"`) so a scheduler restart never auto-triggers a run before
+`processing`/`streaming` are confirmed healthy; unpause each manually from the
+UI once they are. Both DAGs use the same ephemeral-container execution model
+described above. Retries (2x, with a short delay) and an `on_failure_callback`
+that logs a clear failure message give basic error handling/alerting without
+needing an external alerting service.
