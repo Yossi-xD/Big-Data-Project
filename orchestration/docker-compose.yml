@@ -24,6 +24,10 @@ x-airflow-common: &airflow-common
   depends_on:
     airflow-postgres:
       condition: service_healthy
+  # Without this, a Docker daemon restart (host reboot, Docker Desktop update)
+  # leaves the scheduler/webserver dead while everything else comes back up.
+  # airflow-init overrides it back to "no" below (one-shot).
+  restart: unless-stopped
 
 services:
   airflow-postgres:

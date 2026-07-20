@@ -50,6 +50,9 @@ def spark_task(task_id: str, script: str) -> DockerOperator:
         network_mode=NETWORK,
         mounts=[IVY_CACHE_MOUNT],
         mount_tmp_dir=False,
+        # env parity with the long-lived spark-iceberg service in
+        # processing/docker-compose.yml, which also sets AWS_REGION
+        environment={"AWS_REGION": "us-east-1"},
         on_failure_callback=alert_on_failure,
     )
 

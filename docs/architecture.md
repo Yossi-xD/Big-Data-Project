@@ -23,9 +23,16 @@ system:
 |---|---|---|
 | Food Delivery (orders) | real-time streaming | Kafka `orders_stream` topic (`/streaming`) |
 | Store Reviews | **late-arrival** (review_time trails ingestion_time by hours/days) | batch file -> MinIO `landing` bucket (`/processing/seed_data`) |
-| Stores | static/batch reference data (feeds `dim_store`, SCD2) | batch file -> MinIO `landing` bucket (`/processing/seed_data`) |
+| Traffic (TrafficTab23) | static/batch context data | batch file -> MinIO `landing` bucket (`/processing/seed_data`) |
 
-Reviews and Stores are real Kaggle datasets Tama sources directly; the infra
+Traffic replaced the originally planned Stores dataset, per the lecturer's
+feedback on the mid-term submission. Consequently `dim_store` (SCD Type 2) is
+not loaded from any external file -- it is derived during processing from the
+store IDs that link the three sources together.
+
+Reviews and Traffic are real datasets Tama sources directly (Traffic is
+committed as a reproducible 20,000-row random sample of the full 571MB file --
+`processing/data_prep/create_traffic_sample.py` regenerates it); the infra
 side only provides the landing zone they get uploaded into (see
 `processing/seed_data/README.md`) and the Spark environment to read them
 (`s3a://landing/...`). The 48-hour late-arrival requirement is primarily
@@ -42,7 +49,7 @@ flowchart LR
     end
 
     subgraph processing ["/processing"]
-        seed["seed_data/\n(reviews.csv, stores.csv -- Tama)"] -->|mc-init uploads once| landing[("MinIO\nlanding bucket")]
+        seed["seed_data/\n(reviews.csv, traffic_sample.csv -- Tama)"] -->|mc-init uploads once| landing[("MinIO\nlanding bucket")]
         spark["spark-iceberg\n(Spark + Iceberg + hadoop-aws)"]
         rest["iceberg-rest\n(Iceberg REST catalog)"]
         minio[("MinIO\nwarehouse/{bronze,silver,gold}")]
@@ -88,20 +95,27 @@ namespaces: `lake.bronze`, `lake.silver`, `lake.gold` (catalog name `lake`).
 Iceberg places each namespace's tables under `warehouse/<namespace>/<table>/`,
 which is what gives the literal `bronze/`, `silver/`, `gold/` folder structure
 the assignment asks for. A second bucket, `landing`, holds the raw,
-pre-Iceberg batch files (Reviews, Stores) that `batch_to_bronze.py` reads to
-produce the first bronze tables -- see `/processing/jobs/README.md` for the
-exact catalog contract Spark jobs must follow, and `/docs/data_model.md` /
-`/docs/bronze_silver_gold.md` for the table designs themselves.
+pre-Iceberg batch files (Reviews, Traffic) that `batch_to_bronze.py` reads to
+produce the first bronze tables (`lake.bronze.reviews_raw`,
+`lake.bronze.traffic_raw`) -- see `/processing/jobs/README.md` for the
+exact catalog contract Spark jobs must follow. (Dedicated data-model docs with
+the per-layer table designs are still to be added under `/docs` alongside the
+silver/gold jobs.)
 
 ## Orchestration: two DAGs
 
 - `main_pipeline_dag` (daily): `load_batch_to_bronze` -> `run_bronze_to_silver`
-  -> `run_silver_to_gold` -> `run_quality_checks`.
+  -> `build_silver_conformed` -> `build_gold_dimensions` ->
+  `update_scd2_dim_store` -> `build_gold_facts` -> `build_gold_aggregates` ->
+  `run_quality_checks`.
 - `stream_ingestion_dag` (every 5 minutes): drains whatever has landed in the
   `orders_stream` Kafka topic since the last run into bronze, via Spark
   Structured Streaming with `trigger(availableNow=True)`.
 
-Both DAGs use the same ephemeral-container execution model described above.
-Retries (2x, with a short delay) and an `on_failure_callback` that logs a clear
-failure message give basic error handling/alerting without needing an external
-alerting service.
+Both DAGs are created **paused** (`AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION:
+"true"`) so a scheduler restart never auto-triggers a run before
+`processing`/`streaming` are confirmed healthy; unpause each manually from the
+UI once they are. Both DAGs use the same ephemeral-container execution model
+described above. Retries (2x, with a short delay) and an `on_failure_callback`
+that logs a clear failure message give basic error handling/alerting without
+needing an external alerting service.

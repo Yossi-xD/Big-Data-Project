@@ -18,8 +18,22 @@ mc pipe local/warehouse/gold/.keep </dev/null
 
 mc mb --ignore-existing local/landing
 
-if [ -n "$(find /seed_data -type f ! -name .gitkeep ! -name README.md 2>/dev/null)" ]; then
-  mc cp --recursive /seed_data/ local/landing/
+# Detect seed files with pure shell (glob + case): the minio/mc image ships no
+# `find`, so a $(find ...) check silently returns empty and skips the upload.
+seed_has_files=""
+for f in /seed_data/*; do
+  [ -e "$f" ] || continue # glob matched nothing: $f is the literal pattern
+  case "${f##*/}" in .gitkeep | README.md) continue ;; esac
+  seed_has_files=1
+  break
+done
+
+if [ -n "$seed_has_files" ]; then
+  # mirror instead of cp: mc cp has no --exclude, and we don't want the folder's
+  # README.md/.gitkeep ending up in the landing bucket alongside the data files.
+  # The leading * is required: this mc release matches exclude patterns against
+  # the object path with a leading slash ("/README.md").
+  mc mirror --overwrite --exclude "*README.md" --exclude "*.gitkeep" /seed_data/ local/landing/
   echo "seed_data uploaded to s3://landing/"
 else
   echo "no seed_data files yet -- landing bucket created empty"
